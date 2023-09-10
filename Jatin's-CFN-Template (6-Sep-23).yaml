@@ -1,0 +1,207 @@
+Parameters:
+  VPCCidrBlock:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: Please enter CIDR Block for your VPC
+  Subnet1CidrBlock:
+    Type: String
+    Default: 10.0.0.0/24
+    Description: Please enter CIDR Block for your subnet1
+  Subnet1AvailabilityZone:
+    Type: String
+    Default: us-east-1a
+    Description: Please enter AZ for your subnet1
+  Subnet2CidrBlock:
+    Type: String
+    Default: 10.0.1.0/24
+    Description: Please enter CIDR Block for your subnet2
+  Subnet2AvailabilityZone:
+    Type: String
+    Default: us-east-1b
+    Description: Please enter AZ for your subnet2
+Resources:
+ jatinVPC:
+  Type: AWS::EC2::VPC
+  Properties:
+    CidrBlock: !Ref VPCCidrBlock 
+    EnableDnsSupport: 'true'
+    EnableDnsHostnames: 'true'
+    Tags:
+     - Key: Name
+       Value: jatinVPC
+ subnet1:
+  Type: AWS::EC2::Subnet
+  Properties:
+      VpcId:
+        Ref: jatinVPC
+      CidrBlock: !Ref Subnet1CidrBlock
+      AvailabilityZone: !Ref Subnet1AvailabilityZone
+      MapPublicIpOnLaunch: 'true'
+      Tags:
+      - Key: Name
+        Value: jatin-public-subnet-cfn
+ subnet2:
+  Type: AWS::EC2::Subnet
+  Properties:
+      VpcId:
+        Ref: jatinVPC
+      CidrBlock: !Ref Subnet2CidrBlock
+      AvailabilityZone: !Ref Subnet2AvailabilityZone
+      Tags:
+      - Key: Name
+        Value: jatin-private-subnet-cfn
+ IGW:
+  Type: AWS::EC2::InternetGateway
+  Properties:
+      Tags:
+      - Key: Name
+        Value: jatin-igw-cfn
+ AttachGateway:
+  Type: AWS::EC2::VPCGatewayAttachment
+  Properties:
+    VpcId:
+       Ref: jatinVPC 
+    InternetGatewayId:
+       Ref: IGW
+ RouteTable1:
+  Type: AWS::EC2::RouteTable
+  Properties:
+      VpcId:  
+        Ref: jatinVPC
+      Tags:
+      - Key: Name
+        Value: jatin-public-routetable-cfn
+ Route1:
+  Type: AWS::EC2::Route
+  DependsOn: IGW
+  Properties:
+       RouteTableId:
+         Ref: RouteTable1
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+         Ref: IGW
+ subnet1RouteTable1Association:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+      SubnetId:
+        Ref: subnet1
+      RouteTableId:
+        Ref: RouteTable1
+ RouteTable2:
+  Type: AWS::EC2::RouteTable
+  Properties:
+      VpcId:  
+        Ref: jatinVPC
+      Tags:
+      - Key: Name
+        Value: jatin-private-routetable-cfn
+ Route2:
+  Type: AWS::EC2::Route
+  DependsOn: NATGateway
+  Properties:
+       RouteTableId:
+         Ref: RouteTable2
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+         Ref: NATGateway
+ subnet2RouteTable2Association:
+  Type: AWS::EC2::SubnetRouteTableAssociation
+  Properties:
+      SubnetId:
+        Ref: subnet2
+      RouteTableId:
+        Ref: RouteTable2
+ NATGateway:
+  Type: AWS::EC2::NatGateway
+  Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref subnet1
+      Tags:
+      - Key: Name
+        Value: jatin-natgateway-cfn
+ NATGatewayEIP:
+  Type: AWS::EC2::EIP
+ JatinLoadBalancerSecurityGroup1:
+  Type: AWS::EC2::SecurityGroup
+  Properties:
+      GroupDescription: Public EC2 security group
+      SecurityGroupIngress:
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+      VpcId: !Ref jatinVPC
+#  JatinEC2Instance1: 
+#   Type: AWS::EC2::Instance
+#   Properties: 
+#       ImageId: "ami-01c647eace872fc02"
+#       InstanceType: t2.micro
+#       KeyName: "VM's"
+#       SubnetId: !Ref subnet1
+#       SecurityGroupIds:
+#       - Ref: JatinSecurityGroup1
+#       BlockDeviceMappings: 
+#       - DeviceName: "/dev/xvda"
+#         Ebs: 
+#           VolumeType: "io1"
+#           Iops: "200"
+#           DeleteOnTermination: "false"
+#           VolumeSize: "8"
+#       - DeviceName: "/dev/sdk"
+#         NoDevice: {}
+#       Tags:
+#       - Key: Name
+#         Value: jatin-public-instance
+#  JatinEC2Instance2: 
+#   Type: AWS::EC2::Instance
+#   Properties: 
+#       ImageId: "ami-01c647eace872fc02"
+#       InstanceType: t2.micro
+#       KeyName: "VM's"
+#       SubnetId: !Ref subnet2
+#       SecurityGroupIds:
+#       - Ref: JatinSecurityGroup1
+#       BlockDeviceMappings: 
+#       - DeviceName: "/dev/xvda"
+#         Ebs: 
+#           VolumeType: "io1"
+#           Iops: "200"
+#           DeleteOnTermination: "false"
+#           VolumeSize: "8"
+#       - DeviceName: "/dev/sdk"
+#         NoDevice: {}
+#       Tags:
+#       - Key: Name
+#         Value: jatin-private-instance
+ Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+  Properties: 
+  IpAddressType: ipv4
+  Name: Jatin-loadbalancer
+  Scheme: internet-facing
+  SecurityGroups: 
+    - Ref: JatinLoadBalancerSecurityGroup1
+  SubnetMappings: 
+    - Ref: subnet1
+    - Ref: subnet2
+  Type: application
+ Jatin.0TargetGroup:
+  Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  Properties:
+      HealthCheckEnabled: false
+      Name: MyTargets
+      TargetType: lambda
+      Targets:
+      - Id: !GetAtt [ MyLambdaFunction, Arn ]
+
+
+
+
+
